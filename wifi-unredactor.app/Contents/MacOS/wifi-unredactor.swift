@@ -52,6 +52,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                 let noise = interface.noiseMeasurement()
                 jsonOutput["noise_dbm"] = "\(noise) dBm"
 
+                let rssi = interface.rssiValue()
+                jsonOutput["rssi_dbm"] = "\(rssi) dBm"
+
                 if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: .prettyPrinted),
                    let jsonString = String(data: jsonData, encoding: .utf8) {
                     print(jsonString)
