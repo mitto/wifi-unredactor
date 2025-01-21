@@ -8,23 +8,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
 
     // 固定されたJSONキーの順序を定義
     let jsonKeys = [
-        "interface",
-        "mac_address",
         "timestamp",
-        "ssid",
         "bssid",
-        "phy_mode",
-        "noise_dbm",
-        "rssi_dbm",
-        "interface_mode",
-        "channel_number",
         "channel_band",
-        "channel_width",
         "channel_info",
+        "channel_number",
+        "channel_width",
+        "interface",
+        "interface_mode",
+        "mac_address",
+        "mcs_index",
+        "noise_dbm",
+        "phy_mode",
+        "rssi_dbm",
         "security",
+        "ssid",
         "transmit_power",
         "transmit_rate",
-        "mcs_index",
     ]
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
