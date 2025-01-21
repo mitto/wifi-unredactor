@@ -6,6 +6,25 @@ import Foundation
 class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
     var locationManager: CLLocationManager?
 
+    // 固定されたJSONキーの順序を定義
+    let jsonKeys = [
+        "interface",
+        "timestamp",
+        "ssid",
+        "bssid",
+        "phy_mode",
+        "noise_dbm",
+        "rssi_dbm",
+        "interface_mode",
+        "channel_number",
+        "channel_band",
+        "channel_width",
+        "channel_info",
+        "security",
+        "transmit_power",
+        "transmit_rate"
+    ]
+
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         locationManager = CLLocationManager()
         locationManager?.delegate = self
@@ -15,68 +34,68 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         if status == .authorizedAlways || status == .authorized {
             if let interface = CWWiFiClient.shared().interface() {
-                var jsonOutput: [String: String] = [:]
+                var tempOutput: [String: String] = [:]
 
-                jsonOutput["interface"] = interface.interfaceName
+                tempOutput["interface"] = interface.interfaceName
 
                 let dateFormatter = DateFormatter()
                 dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ"
                 dateFormatter.locale = Locale(identifier: "en_US_POSIX")
                 dateFormatter.calendar = Calendar(identifier: .gregorian)
-                jsonOutput["timestamp"] = dateFormatter.string(from: Date())
+                tempOutput["timestamp"] = dateFormatter.string(from: Date())
 
                 if let ssid = interface.ssid() {
-                    jsonOutput["ssid"] = ssid
+                    tempOutput["ssid"] = ssid
                 } else {
-                    jsonOutput["ssid"] = "failed to retrieve SSID"
+                    tempOutput["ssid"] = "failed to retrieve SSID"
                 }
 
                 if let bssid = interface.bssid() {
-                    jsonOutput["bssid"] = bssid
+                    tempOutput["bssid"] = bssid
                 } else {
-                    jsonOutput["bssid"] = "failed to retrieve BSSID"
+                    tempOutput["bssid"] = "failed to retrieve BSSID"
                 }
 
                 let phyMode = interface.activePHYMode()
                 switch phyMode {
-                case .mode11a: jsonOutput["phy_mode"] = "802.11a"
-                case .mode11b: jsonOutput["phy_mode"] = "802.11b"
-                case .mode11g: jsonOutput["phy_mode"] = "802.11g"
-                case .mode11n: jsonOutput["phy_mode"] = "802.11n"
-                case .mode11ac: jsonOutput["phy_mode"] = "802.11ac"
-                case .mode11ax: jsonOutput["phy_mode"] = "802.11ax"
-                case .modeNone: jsonOutput["phy_mode"] = "none"
-                @unknown default: jsonOutput["phy_mode"] = "unknown"
+                case .mode11a: tempOutput["phy_mode"] = "802.11a"
+                case .mode11b: tempOutput["phy_mode"] = "802.11b"
+                case .mode11g: tempOutput["phy_mode"] = "802.11g"
+                case .mode11n: tempOutput["phy_mode"] = "802.11n"
+                case .mode11ac: tempOutput["phy_mode"] = "802.11ac"
+                case .mode11ax: tempOutput["phy_mode"] = "802.11ax"
+                case .modeNone: tempOutput["phy_mode"] = "none"
+                @unknown default: tempOutput["phy_mode"] = "unknown"
                 }
 
                 let noise = interface.noiseMeasurement()
-                jsonOutput["noise_dbm"] = "\(noise) dBm"
+                tempOutput["noise_dbm"] = "\(noise) dBm"
 
                 let rssi = interface.rssiValue()
-                jsonOutput["rssi_dbm"] = "\(rssi) dBm"
+                tempOutput["rssi_dbm"] = "\(rssi) dBm"
 
                 let mode = interface.interfaceMode()
                 switch mode {
-                case .none: jsonOutput["interface_mode"] = "none"
-                case .station: jsonOutput["interface_mode"] = "station"
-                case .hostAP: jsonOutput["interface_mode"] = "hostAP"
-                case .IBSS: jsonOutput["interface_mode"] = "ibss"
-                @unknown default: jsonOutput["interface_mode"] = "unknown"
+                case .none: tempOutput["interface_mode"] = "none"
+                case .station: tempOutput["interface_mode"] = "station"
+                case .hostAP: tempOutput["interface_mode"] = "hostAP"
+                case .IBSS: tempOutput["interface_mode"] = "ibss"
+                @unknown default: tempOutput["interface_mode"] = "unknown"
                 }
 
                 if let channel = interface.wlanChannel() {
-                    jsonOutput["channel_number"] = String(channel.channelNumber)
-                    jsonOutput["channel_band"] = channel.channelBand == .band2GHz ? "2.4GHz" : "5GHz"
+                    tempOutput["channel_number"] = String(channel.channelNumber)
+                    tempOutput["channel_band"] = channel.channelBand == .band2GHz ? "2.4GHz" : "5GHz"
                     switch channel.channelWidth {
-                    case .width20MHz: jsonOutput["channel_width"] = "20MHz"
-                    case .width40MHz: jsonOutput["channel_width"] = "40MHz"
-                    case .width80MHz: jsonOutput["channel_width"] = "80MHz"
-                    case .width160MHz: jsonOutput["channel_width"] = "160MHz"
-                    case .widthUnknown: jsonOutput["channel_width"] = "unknown"
-                    @unknown default: jsonOutput["channel_width"] = "unknown"
+                    case .width20MHz: tempOutput["channel_width"] = "20MHz"
+                    case .width40MHz: tempOutput["channel_width"] = "40MHz"
+                    case .width80MHz: tempOutput["channel_width"] = "80MHz"
+                    case .width160MHz: tempOutput["channel_width"] = "160MHz"
+                    case .widthUnknown: tempOutput["channel_width"] = "unknown"
+                    @unknown default: tempOutput["channel_width"] = "unknown"
                     }
                 } else {
-                    jsonOutput["channel_info"] = "failed to retrieve channel information"
+                    tempOutput["channel_info"] = "failed to retrieve channel information"
                 }
 
                 let security = interface.security()
@@ -101,15 +120,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                 case .unknown: securityTypes.append("unknown")
                 @unknown default: securityTypes.append("unknown")
                 }
-                jsonOutput["security"] = securityTypes.joined(separator: ", ")
+                tempOutput["security"] = securityTypes.joined(separator: ", ")
 
                 let power = interface.transmitPower()
-                jsonOutput["transmit_power"] = "\(power) dBm"
+                tempOutput["transmit_power"] = "\(power) dBm"
 
                 let rate = interface.transmitRate()
-                jsonOutput["transmit_rate"] = "\(rate) Mbps"
+                tempOutput["transmit_rate"] = "\(rate) Mbps"
 
-                if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: .prettyPrinted),
+                // 順序付きの出力を作成
+                var orderedOutput: [String: String] = [:]
+                for key in jsonKeys {
+                    if let value = tempOutput[key] {
+                        orderedOutput[key] = value
+                    }
+                }
+
+                if let jsonData = try? JSONSerialization.data(withJSONObject: orderedOutput, options: [.prettyPrinted, .sortedKeys]),
                    let jsonString = String(data: jsonData, encoding: .utf8) {
                     print(jsonString)
                 } else {
@@ -119,7 +146,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
             NSApp.terminate(nil)
         } else {
             let jsonOutput = ["error": "location services denied"]
-            if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: .prettyPrinted),
+            if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: [.prettyPrinted, .sortedKeys]),
                let jsonString = String(data: jsonData, encoding: .utf8) {
                 print(jsonString)
             } else {
