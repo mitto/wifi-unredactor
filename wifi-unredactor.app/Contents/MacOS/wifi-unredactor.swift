@@ -103,6 +103,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                 }
                 jsonOutput["security"] = securityTypes.joined(separator: ", ")
 
+                let power = interface.transmitPower()
+                jsonOutput["transmit_power"] = "\(power) dBm"
+
                 if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: .prettyPrinted),
                    let jsonString = String(data: jsonData, encoding: .utf8) {
                     print(jsonString)
