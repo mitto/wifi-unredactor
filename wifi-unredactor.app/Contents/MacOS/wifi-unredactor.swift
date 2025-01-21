@@ -79,6 +79,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                     jsonOutput["channel_info"] = "failed to retrieve channel information"
                 }
 
+                let security = interface.security()
+                var securityTypes: [String] = []
+                switch security {
+                case .none: securityTypes.append("none")
+                case .WEP: securityTypes.append("WEP")
+                case .dynamicWEP: securityTypes.append("Dynamic WEP")
+                case .wpaPersonal: securityTypes.append("WPA Personal")
+                case .wpaPersonalMixed: securityTypes.append("WPA Personal Mixed")
+                case .wpaEnterprise: securityTypes.append("WPA Enterprise")
+                case .wpaEnterpriseMixed: securityTypes.append("WPA Enterprise Mixed")
+                case .wpa2Personal: securityTypes.append("WPA2 Personal")
+                case .wpa2Enterprise: securityTypes.append("WPA2 Enterprise")
+                case .wpa3Personal: securityTypes.append("WPA3 Personal")
+                case .wpa3Enterprise: securityTypes.append("WPA3 Enterprise")
+                case .wpa3Transition: securityTypes.append("WPA3 Transition")
+                case .personal: securityTypes.append("Personal")
+                case .enterprise: securityTypes.append("Enterprise")
+                case .OWE: securityTypes.append("OWE")
+                case .oweTransition: securityTypes.append("OWE Transition")
+                case .unknown: securityTypes.append("unknown")
+                @unknown default: securityTypes.append("unknown")
+                }
+                jsonOutput["security"] = securityTypes.joined(separator: ", ")
+
                 if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: .prettyPrinted),
                    let jsonString = String(data: jsonData, encoding: .utf8) {
                     print(jsonString)
