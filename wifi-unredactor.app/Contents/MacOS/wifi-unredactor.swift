@@ -55,6 +55,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                 let rssi = interface.rssiValue()
                 jsonOutput["rssi_dbm"] = "\(rssi) dBm"
 
+                let mode = interface.interfaceMode()
+                switch mode {
+                case .none: jsonOutput["interface_mode"] = "none"
+                case .station: jsonOutput["interface_mode"] = "station"
+                case .hostAP: jsonOutput["interface_mode"] = "hostAP"
+                case .IBSS: jsonOutput["interface_mode"] = "ibss"
+                @unknown default: jsonOutput["interface_mode"] = "unknown"
+                }
+
                 if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: .prettyPrinted),
                    let jsonString = String(data: jsonData, encoding: .utf8) {
                     print(jsonString)
