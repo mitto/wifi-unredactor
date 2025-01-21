@@ -22,7 +22,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
         "channel_info",
         "security",
         "transmit_power",
-        "transmit_rate"
+        "transmit_rate",
+        "mcs_index",
     ]
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
@@ -127,6 +128,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
 
                 let rate = interface.transmitRate()
                 tempOutput["transmit_rate"] = "\(rate) Mbps"
+
+                // NOTE: https://stackoverflow.com/questions/48129952/core-wlan-mcs-index
+                if let mcs = interface.value(forKey: "mcsIndex") as? Int {
+                    tempOutput["mcs_index"] = String(mcs)
+                } else {
+                    tempOutput["mcs_index"] = "unknown"
+                }
 
                 // 順序付きの出力を作成
                 var orderedOutput: [String: String] = [:]
