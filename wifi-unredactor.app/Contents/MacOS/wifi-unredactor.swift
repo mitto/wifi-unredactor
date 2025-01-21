@@ -64,6 +64,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                 @unknown default: jsonOutput["interface_mode"] = "unknown"
                 }
 
+                if let channel = interface.wlanChannel() {
+                    jsonOutput["channel_number"] = String(channel.channelNumber)
+                    jsonOutput["channel_band"] = channel.channelBand == .band2GHz ? "2.4GHz" : "5GHz"
+                    switch channel.channelWidth {
+                    case .width20MHz: jsonOutput["channel_width"] = "20MHz"
+                    case .width40MHz: jsonOutput["channel_width"] = "40MHz"
+                    case .width80MHz: jsonOutput["channel_width"] = "80MHz"
+                    case .width160MHz: jsonOutput["channel_width"] = "160MHz"
+                    case .widthUnknown: jsonOutput["channel_width"] = "unknown"
+                    @unknown default: jsonOutput["channel_width"] = "unknown"
+                    }
+                } else {
+                    jsonOutput["channel_info"] = "failed to retrieve channel information"
+                }
+
                 if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: .prettyPrinted),
                    let jsonString = String(data: jsonData, encoding: .utf8) {
                     print(jsonString)
