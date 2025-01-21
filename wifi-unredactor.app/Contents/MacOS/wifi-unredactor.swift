@@ -5,6 +5,7 @@ import Foundation
 
 class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
     var locationManager: CLLocationManager?
+    var outputFormat: String = "json"  // デフォルトはJSON形式
 
     // 固定されたJSONキーの順序を定義
     let jsonKeys = [
@@ -28,9 +29,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
     ]
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        // コマンドライン引数を処理
+        let args = CommandLine.arguments
+        if args.contains("--csv") {
+            outputFormat = "csv"
+        }
+
         locationManager = CLLocationManager()
         locationManager?.delegate = self
         locationManager?.requestAlwaysAuthorization()
+    }
+
+    func outputCSV(_ data: [String: String]) {
+        let header = jsonKeys.joined(separator: ",")
+        let values = jsonKeys.map { key in
+            let value = data[key] ?? ""
+            // カンマを含む場合はダブルクォートで囲む
+            return value.contains(",") ? "\"\(value)\"" : value
+        }.joined(separator: ",")
+
+        print(header)
+        print(values)
     }
 
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
@@ -143,29 +162,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                     tempOutput["mcs_index"] = "unknown"
                 }
 
-                // 順序付きの出力を作成
-                var orderedOutput: [String: String] = [:]
-                for key in jsonKeys {
-                    if let value = tempOutput[key] {
-                        orderedOutput[key] = value
+                if outputFormat == "csv" {
+                    outputCSV(tempOutput)
+                } else {
+                    // 順序付きの出力を作成
+                    var orderedOutput: [String: String] = [:]
+                    for key in jsonKeys {
+                        if let value = tempOutput[key] {
+                            orderedOutput[key] = value
+                        }
+                    }
+
+                    if let jsonData = try? JSONSerialization.data(withJSONObject: orderedOutput, options: [.prettyPrinted, .sortedKeys]),
+                       let jsonString = String(data: jsonData, encoding: .utf8) {
+                        print(jsonString)
+                    } else {
+                        print("error: failed to create JSON")
                     }
                 }
-
-                if let jsonData = try? JSONSerialization.data(withJSONObject: orderedOutput, options: [.prettyPrinted, .sortedKeys]),
+            }
+            NSApp.terminate(nil)
+        } else {
+            if outputFormat == "csv" {
+                print("location services denied")
+            } else {
+                let jsonOutput = ["error": "location services denied"]
+                if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: [.prettyPrinted, .sortedKeys]),
                    let jsonString = String(data: jsonData, encoding: .utf8) {
                     print(jsonString)
                 } else {
                     print("error: failed to create JSON")
                 }
-            }
-            NSApp.terminate(nil)
-        } else {
-            let jsonOutput = ["error": "location services denied"]
-            if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: [.prettyPrinted, .sortedKeys]),
-               let jsonString = String(data: jsonData, encoding: .utf8) {
-                print(jsonString)
-            } else {
-                print("error: failed to create JSON")
             }
             NSApp.terminate(nil)
         }
