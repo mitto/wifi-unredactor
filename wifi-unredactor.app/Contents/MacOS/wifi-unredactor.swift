@@ -37,6 +37,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                     jsonOutput["bssid"] = "failed to retrieve BSSID"
                 }
 
+                let phyMode = interface.activePHYMode()
+                switch phyMode {
+                case .mode11a: jsonOutput["phy_mode"] = "802.11a"
+                case .mode11b: jsonOutput["phy_mode"] = "802.11b"
+                case .mode11g: jsonOutput["phy_mode"] = "802.11g"
+                case .mode11n: jsonOutput["phy_mode"] = "802.11n"
+                case .mode11ac: jsonOutput["phy_mode"] = "802.11ac"
+                case .mode11ax: jsonOutput["phy_mode"] = "802.11ax"
+                case .modeNone: jsonOutput["phy_mode"] = "none"
+                @unknown default: jsonOutput["phy_mode"] = "unknown"
+                }
+
                 if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: .prettyPrinted),
                    let jsonString = String(data: jsonData, encoding: .utf8) {
                     print(jsonString)
