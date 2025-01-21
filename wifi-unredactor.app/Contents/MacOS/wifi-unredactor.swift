@@ -3,16 +3,13 @@ import CoreLocation
 import CoreWLAN
 import Foundation
 
-class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
-    var locationManager: CLLocationManager?
-    var outputFormat: String = "json"  // デフォルトはJSON形式
-    var showCSVHeader: Bool = true     // デフォルトはヘッダーを表示
-    var selectedFields: [String]?      // 選択されたフィールド
-    var showUnits: Bool = true        // デフォルトは単位を表示
-    var bssidToApName: [String: String] = [:] // BSSIDとAP名のマッピング
+// MARK: - Constants
+enum Constants {
+    static let defaultOutputFormat = "json"
+    static let defaultShowCSVHeader = true
+    static let defaultShowUnits = true
 
-    // 固定されたJSONキーの順序を定義
-    let jsonKeys = [
+    static let jsonKeys = [
         "timestamp",
         "bssid",
         "ap_name",
@@ -32,11 +29,143 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
         "transmit_power",
         "transmit_rate",
     ]
+}
 
-    func loadBssidMapping(from path: String) {
+// MARK: - Error Types
+enum WiFiError: Error {
+    case locationServicesDenied
+    case interfaceNotAvailable
+    case failedToCreateJSON
+    case failedToReadMapping
+    case invalidFields
+}
+
+// MARK: - Data Structures
+struct WiFiData {
+    let timestamp: String
+    let interface: String
+    let macAddress: String
+    let ssid: String
+    let bssid: String
+    let apName: String
+    let phyMode: String
+    let noiseDBM: Int
+    let rssiDBM: Int
+    let interfaceMode: String
+    let channelInfo: ChannelInfo
+    let security: String
+    let transmitPower: Int
+    let transmitRate: Int
+    let mcsIndex: String
+
+    struct ChannelInfo {
+        let number: Int
+        let band: String
+        let width: String
+    }
+}
+
+// MARK: - Output Formatter Protocol
+protocol OutputFormatter {
+    func format(_ data: WiFiData, showUnits: Bool, selectedFields: [String]?) -> String
+}
+
+// MARK: - Output Formatters
+class JSONFormatter: OutputFormatter {
+    func format(_ data: WiFiData, showUnits: Bool, selectedFields: [String]?) -> String {
+        var dict: [String: String] = [:]
+
+        // Convert WiFiData to dictionary
+        dict["timestamp"] = data.timestamp
+        dict["interface"] = data.interface
+        dict["mac_address"] = data.macAddress
+        dict["ssid"] = data.ssid
+        dict["bssid"] = data.bssid
+        dict["ap_name"] = data.apName
+        dict["phy_mode"] = data.phyMode
+        dict["noise_dbm"] = showUnits ? "\(data.noiseDBM)dBm" : String(data.noiseDBM)
+        dict["rssi_dbm"] = showUnits ? "\(data.rssiDBM)dBm" : String(data.rssiDBM)
+        dict["interface_mode"] = data.interfaceMode
+        dict["channel_number"] = String(data.channelInfo.number)
+        dict["channel_band"] = data.channelInfo.band
+        dict["channel_width"] = data.channelInfo.width
+        dict["security"] = data.security
+        dict["transmit_power"] = showUnits ? "\(data.transmitPower)dBm" : String(data.transmitPower)
+        dict["transmit_rate"] = showUnits ? "\(data.transmitRate)Mbps" : String(data.transmitRate)
+        dict["mcs_index"] = data.mcsIndex
+
+        // Filter fields if needed
+        if let fields = selectedFields {
+            dict = dict.filter { fields.contains($0.key) }
+        }
+
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]),
+              let jsonString = String(data: jsonData, encoding: .utf8) else {
+            return "error: failed to create JSON"
+        }
+
+        return jsonString
+    }
+}
+
+class CSVFormatter: OutputFormatter {
+    let showHeader: Bool
+
+    init(showHeader: Bool = true) {
+        self.showHeader = showHeader
+    }
+
+    func format(_ data: WiFiData, showUnits: Bool, selectedFields: [String]?) -> String {
+        let keysToUse = selectedFields ?? Constants.jsonKeys
+        var output = ""
+
+        if showHeader {
+            output += keysToUse.joined(separator: ",") + "\n"
+        }
+
+        let dict: [String: String] = [
+            "timestamp": data.timestamp,
+            "interface": data.interface,
+            "mac_address": data.macAddress,
+            "ssid": data.ssid,
+            "bssid": data.bssid,
+            "ap_name": data.apName,
+            "phy_mode": data.phyMode,
+            "noise_dbm": showUnits ? "\(data.noiseDBM)dBm" : String(data.noiseDBM),
+            "rssi_dbm": showUnits ? "\(data.rssiDBM)dBm" : String(data.rssiDBM),
+            "interface_mode": data.interfaceMode,
+            "channel_number": String(data.channelInfo.number),
+            "channel_band": data.channelInfo.band,
+            "channel_width": data.channelInfo.width,
+            "security": data.security,
+            "transmit_power": showUnits ? "\(data.transmitPower)dBm" : String(data.transmitPower),
+            "transmit_rate": showUnits ? "\(data.transmitRate)Mbps" : String(data.transmitRate),
+            "mcs_index": data.mcsIndex
+        ]
+
+        let values = keysToUse.map { key in
+            let value = dict[key] ?? ""
+            return value.contains(",") ? "\"\(value)\"" : value
+        }
+
+        output += values.joined(separator: ",")
+        return output
+    }
+}
+
+// MARK: - WiFi Service
+class WiFiService {
+    private let interface: CWInterface?
+    private var bssidToApName: [String: String]
+
+    init() {
+        self.interface = CWWiFiClient.shared().interface()
+        self.bssidToApName = [:]
+    }
+
+    func loadBssidMapping(from path: String) throws {
         guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
-            print("error: failed to read BSSID mapping file")
-            return
+            throw WiFiError.failedToReadMapping
         }
 
         let lines = content.components(separatedBy: .newlines)
@@ -48,6 +177,122 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                 bssidToApName[bssid] = apName
             }
         }
+    }
+
+    func getCurrentWiFiData() throws -> WiFiData {
+        guard let interface = self.interface else {
+            throw WiFiError.interfaceNotAvailable
+        }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ"
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dateFormatter.calendar = Calendar(identifier: .gregorian)
+
+        let bssid = interface.bssid() ?? "failed to retrieve BSSID"
+        let apName = bssidToApName[bssid] ?? ""
+
+        let channelInfo: WiFiData.ChannelInfo
+        if let channel = interface.wlanChannel() {
+            channelInfo = WiFiData.ChannelInfo(
+                number: channel.channelNumber,
+                band: {
+                    switch channel.channelBand {
+                    case .band2GHz: return "2.4GHz"
+                    case .band5GHz: return "5GHz"
+                    case .band6GHz: return "6GHz"
+                    case .bandUnknown: return "unknown"
+                    @unknown default: return "unknown"
+                    }
+                }(),
+                width: {
+                    switch channel.channelWidth {
+                    case .width20MHz: return "20MHz"
+                    case .width40MHz: return "40MHz"
+                    case .width80MHz: return "80MHz"
+                    case .width160MHz: return "160MHz"
+                    case .widthUnknown: return "unknown"
+                    @unknown default: return "unknown"
+                    }
+                }()
+            )
+        } else {
+            channelInfo = WiFiData.ChannelInfo(number: 0, band: "unknown", width: "unknown")
+        }
+
+        return WiFiData(
+            timestamp: dateFormatter.string(from: Date()),
+            interface: interface.interfaceName ?? "unknown",
+            macAddress: interface.hardwareAddress() ?? "failed to retrieve MAC address",
+            ssid: interface.ssid() ?? "failed to retrieve SSID",
+            bssid: bssid,
+            apName: apName,
+            phyMode: {
+                switch interface.activePHYMode() {
+                case .mode11a: return "802.11a"
+                case .mode11b: return "802.11b"
+                case .mode11g: return "802.11g"
+                case .mode11n: return "802.11n"
+                case .mode11ac: return "802.11ac"
+                case .mode11ax: return "802.11ax"
+                case .modeNone: return "none"
+                @unknown default: return "unknown"
+                }
+            }(),
+            noiseDBM: interface.noiseMeasurement(),
+            rssiDBM: interface.rssiValue(),
+            interfaceMode: {
+                switch interface.interfaceMode() {
+                case .none: return "none"
+                case .station: return "station"
+                case .hostAP: return "hostAP"
+                case .IBSS: return "ibss"
+                @unknown default: return "unknown"
+                }
+            }(),
+            channelInfo: channelInfo,
+            security: {
+                let security = interface.security()
+                switch security {
+                case .none: return "none"
+                case .WEP: return "WEP"
+                case .dynamicWEP: return "Dynamic WEP"
+                case .wpaPersonal: return "WPA Personal"
+                case .wpaPersonalMixed: return "WPA Personal Mixed"
+                case .wpaEnterprise: return "WPA Enterprise"
+                case .wpaEnterpriseMixed: return "WPA Enterprise Mixed"
+                case .wpa2Personal: return "WPA2 Personal"
+                case .wpa2Enterprise: return "WPA2 Enterprise"
+                case .wpa3Personal: return "WPA3 Personal"
+                case .wpa3Enterprise: return "WPA3 Enterprise"
+                case .wpa3Transition: return "WPA3 Transition"
+                case .personal: return "Personal"
+                case .enterprise: return "Enterprise"
+                case .OWE: return "OWE"
+                case .oweTransition: return "OWE Transition"
+                case .unknown: return "unknown"
+                @unknown default: return "unknown"
+                }
+            }(),
+            transmitPower: interface.transmitPower(),
+            transmitRate: Int(interface.transmitRate()),
+            mcsIndex: (interface.value(forKey: "mcsIndex") as? Int).map(String.init) ?? "unknown"
+        )
+    }
+}
+
+class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
+    private var locationManager: CLLocationManager?
+    private var wifiService: WiFiService
+    private var outputFormatter: OutputFormatter
+    private var showUnits: Bool
+    private var selectedFields: [String]?
+
+    override init() {
+        self.wifiService = WiFiService()
+        self.outputFormatter = JSONFormatter()
+        self.showUnits = Constants.defaultShowUnits
+        super.init()
     }
 
     func showHelp() {
@@ -63,7 +308,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
           --bssid-mapping <file>  BSSIDとAP名のマッピングファイルを指定
 
         利用可能なフィールド:
-          \(jsonKeys.joined(separator: "\n  "))
+          \(Constants.jsonKeys.joined(separator: "\n  "))
 
         例:
           wifi-unredactor --csv --fields ssid,bssid,rssi_dbm
@@ -82,211 +327,51 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
             return
         }
 
+        // 出力フォーマットの設定
         if args.contains("--csv") {
-            outputFormat = "csv"
+            let showHeader = !args.contains("--no-header")
+            outputFormatter = CSVFormatter(showHeader: showHeader)
         }
-        if args.contains("--no-header") {
-            showCSVHeader = false
-        }
-        if args.contains("--no-units") {
-            showUnits = false
-        }
+
+        // その他のオプションの設定
+        showUnits = !args.contains("--no-units")
+
         if let mappingIndex = args.firstIndex(of: "--bssid-mapping"),
            mappingIndex + 1 < args.count {
-            loadBssidMapping(from: args[mappingIndex + 1])
+            try? wifiService.loadBssidMapping(from: args[mappingIndex + 1])
         }
+
         if let fieldsIndex = args.firstIndex(of: "--fields"),
            fieldsIndex + 1 < args.count {
-            selectedFields = args[fieldsIndex + 1].split(separator: ",").map(String.init)
-            // 指定されたフィールドが有効かチェック
-            selectedFields = selectedFields?.filter { jsonKeys.contains($0) }
+            selectedFields = args[fieldsIndex + 1]
+                .split(separator: ",")
+                .map(String.init)
+                .filter { Constants.jsonKeys.contains($0) }
+
             if selectedFields?.isEmpty ?? true {
-                selectedFields = nil  // 有効なフィールドがない場合はnilに
+                selectedFields = nil
             }
         }
 
+        // 位置情報の許可を要求
         locationManager = CLLocationManager()
         locationManager?.delegate = self
         locationManager?.requestAlwaysAuthorization()
     }
 
-    func outputCSV(_ data: [String: String]) {
-        let keysToUse = selectedFields ?? jsonKeys
-        let header = keysToUse.joined(separator: ",")
-        let values = keysToUse.map { key in
-            let value = data[key] ?? ""
-            // カンマを含む場合はダブルクォートで囲む
-            return value.contains(",") ? "\"\(value)\"" : value
-        }.joined(separator: ",")
-
-        if showCSVHeader {
-            print(header)
-        }
-        print(values)
-    }
-
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         if status == .authorizedAlways || status == .authorized {
-            if let interface = CWWiFiClient.shared().interface() {
-                var tempOutput: [String: String] = [:]
-
-                tempOutput["interface"] = interface.interfaceName
-
-                if let mac = interface.hardwareAddress() {
-                    tempOutput["mac_address"] = mac
-                } else {
-                    tempOutput["mac_address"] = "failed to retrieve MAC address"
-                }
-
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ"
-                dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-                dateFormatter.calendar = Calendar(identifier: .gregorian)
-                tempOutput["timestamp"] = dateFormatter.string(from: Date())
-
-                if let ssid = interface.ssid() {
-                    tempOutput["ssid"] = ssid
-                } else {
-                    tempOutput["ssid"] = "failed to retrieve SSID"
-                }
-
-                if let bssid = interface.bssid() {
-                    tempOutput["bssid"] = bssid
-                    if let apName = bssidToApName[bssid] {
-                        tempOutput["ap_name"] = apName
-                    } else {
-                        tempOutput["ap_name"] = ""
-                    }
-                } else {
-                    tempOutput["bssid"] = "failed to retrieve BSSID"
-                    tempOutput["ap_name"] = ""
-                }
-
-                let phyMode = interface.activePHYMode()
-                switch phyMode {
-                case .mode11a: tempOutput["phy_mode"] = "802.11a"
-                case .mode11b: tempOutput["phy_mode"] = "802.11b"
-                case .mode11g: tempOutput["phy_mode"] = "802.11g"
-                case .mode11n: tempOutput["phy_mode"] = "802.11n"
-                case .mode11ac: tempOutput["phy_mode"] = "802.11ac"
-                case .mode11ax: tempOutput["phy_mode"] = "802.11ax"
-                case .modeNone: tempOutput["phy_mode"] = "none"
-                @unknown default: tempOutput["phy_mode"] = "unknown"
-                }
-
-                let noise = interface.noiseMeasurement()
-                tempOutput["noise_dbm"] = showUnits ? "\(noise)dBm" : String(noise)
-
-                let rssi = interface.rssiValue()
-                tempOutput["rssi_dbm"] = showUnits ? "\(rssi)dBm" : String(rssi)
-
-                let mode = interface.interfaceMode()
-                switch mode {
-                case .none: tempOutput["interface_mode"] = "none"
-                case .station: tempOutput["interface_mode"] = "station"
-                case .hostAP: tempOutput["interface_mode"] = "hostAP"
-                case .IBSS: tempOutput["interface_mode"] = "ibss"
-                @unknown default: tempOutput["interface_mode"] = "unknown"
-                }
-
-                if let channel = interface.wlanChannel() {
-                    tempOutput["channel_number"] = String(channel.channelNumber)
-                    switch channel.channelBand {
-                    case .band2GHz:
-                        tempOutput["channel_band"] = "2.4GHz"
-                    case .band5GHz:
-                        tempOutput["channel_band"] = "5GHz"
-                    case .band6GHz:
-                        tempOutput["channel_band"] = "6GHz"
-                    case .bandUnknown:
-                        tempOutput["channel_band"] = "unknown"
-                    @unknown default:
-                        tempOutput["channel_band"] = "unknown"
-                    }
-                    switch channel.channelWidth {
-                    case .width20MHz: tempOutput["channel_width"] = "20MHz"
-                    case .width40MHz: tempOutput["channel_width"] = "40MHz"
-                    case .width80MHz: tempOutput["channel_width"] = "80MHz"
-                    case .width160MHz: tempOutput["channel_width"] = "160MHz"
-                    case .widthUnknown: tempOutput["channel_width"] = "unknown"
-                    @unknown default: tempOutput["channel_width"] = "unknown"
-                    }
-                } else {
-                    tempOutput["channel_info"] = "failed to retrieve channel information"
-                }
-
-                let security = interface.security()
-                var securityTypes: [String] = []
-                switch security {
-                case .none: securityTypes.append("none")
-                case .WEP: securityTypes.append("WEP")
-                case .dynamicWEP: securityTypes.append("Dynamic WEP")
-                case .wpaPersonal: securityTypes.append("WPA Personal")
-                case .wpaPersonalMixed: securityTypes.append("WPA Personal Mixed")
-                case .wpaEnterprise: securityTypes.append("WPA Enterprise")
-                case .wpaEnterpriseMixed: securityTypes.append("WPA Enterprise Mixed")
-                case .wpa2Personal: securityTypes.append("WPA2 Personal")
-                case .wpa2Enterprise: securityTypes.append("WPA2 Enterprise")
-                case .wpa3Personal: securityTypes.append("WPA3 Personal")
-                case .wpa3Enterprise: securityTypes.append("WPA3 Enterprise")
-                case .wpa3Transition: securityTypes.append("WPA3 Transition")
-                case .personal: securityTypes.append("Personal")
-                case .enterprise: securityTypes.append("Enterprise")
-                case .OWE: securityTypes.append("OWE")
-                case .oweTransition: securityTypes.append("OWE Transition")
-                case .unknown: securityTypes.append("unknown")
-                @unknown default: securityTypes.append("unknown")
-                }
-                tempOutput["security"] = securityTypes.joined(separator: ", ")
-
-                let power = interface.transmitPower()
-                tempOutput["transmit_power"] = showUnits ? "\(power)dBm" : String(power)
-
-                let rate = Int(interface.transmitRate())
-                tempOutput["transmit_rate"] = showUnits ? "\(rate)Mbps" : String(rate)
-
-                // NOTE: https://stackoverflow.com/questions/48129952/core-wlan-mcs-index
-                if let mcs = interface.value(forKey: "mcsIndex") as? Int {
-                    tempOutput["mcs_index"] = String(mcs)
-                } else {
-                    tempOutput["mcs_index"] = "unknown"
-                }
-
-                if outputFormat == "csv" {
-                    outputCSV(tempOutput)
-                } else {
-                    // 順序付きの出力を作成
-                    var orderedOutput: [String: String] = [:]
-                    let keysToUse = selectedFields ?? jsonKeys
-                    for key in keysToUse {
-                        if let value = tempOutput[key] {
-                            orderedOutput[key] = value
-                        }
-                    }
-
-                    if let jsonData = try? JSONSerialization.data(withJSONObject: orderedOutput, options: [.prettyPrinted, .sortedKeys]),
-                       let jsonString = String(data: jsonData, encoding: .utf8) {
-                        print(jsonString)
-                    } else {
-                        print("error: failed to create JSON")
-                    }
-                }
+            do {
+                let wifiData = try wifiService.getCurrentWiFiData()
+                let output = outputFormatter.format(wifiData, showUnits: showUnits, selectedFields: selectedFields)
+                print(output)
+            } catch {
+                print("error: \(error)")
             }
-            NSApp.terminate(nil)
         } else {
-            if outputFormat == "csv" {
-                print("location services denied")
-            } else {
-                let jsonOutput = ["error": "location services denied"]
-                if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: [.prettyPrinted, .sortedKeys]),
-                   let jsonString = String(data: jsonData, encoding: .utf8) {
-                    print(jsonString)
-                } else {
-                    print("error: failed to create JSON")
-                }
-            }
-            NSApp.terminate(nil)
+            print("error: location services denied")
         }
+        NSApp.terminate(nil)
     }
 }
 
