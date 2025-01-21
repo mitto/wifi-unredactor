@@ -63,7 +63,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
           --bssid-mapping <file>  BSSIDとAP名のマッピングファイルを指定
 
         利用可能なフィールド:
-          \(jsonKeys.joined(separator: "\n          "))
+          \(jsonKeys.joined(separator: "\n  "))
 
         例:
           wifi-unredactor --csv --fields ssid,bssid,rssi_dbm
