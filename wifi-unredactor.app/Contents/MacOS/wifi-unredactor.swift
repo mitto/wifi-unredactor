@@ -49,6 +49,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                 @unknown default: jsonOutput["phy_mode"] = "unknown"
                 }
 
+                let noise = interface.noiseMeasurement()
+                jsonOutput["noise_dbm"] = "\(noise) dBm"
+
                 if let jsonData = try? JSONSerialization.data(withJSONObject: jsonOutput, options: .prettyPrinted),
                    let jsonString = String(data: jsonData, encoding: .utf8) {
                     print(jsonString)
