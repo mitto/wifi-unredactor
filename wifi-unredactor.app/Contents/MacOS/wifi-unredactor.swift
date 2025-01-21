@@ -8,6 +8,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
     var outputFormat: String = "json"  // デフォルトはJSON形式
     var showCSVHeader: Bool = true     // デフォルトはヘッダーを表示
     var selectedFields: [String]?      // 選択されたフィールド
+    var showUnits: Bool = true        // デフォルトは単位を表示
 
     // 固定されたJSONキーの順序を定義
     let jsonKeys = [
@@ -38,6 +39,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
         }
         if args.contains("--no-header") {
             showCSVHeader = false
+        }
+        if args.contains("--no-units") {
+            showUnits = false
         }
         if let fieldsIndex = args.firstIndex(of: "--fields"),
            fieldsIndex + 1 < args.count {
@@ -113,10 +117,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                 }
 
                 let noise = interface.noiseMeasurement()
-                tempOutput["noise_dbm"] = "\(noise) dBm"
+                tempOutput["noise_dbm"] = showUnits ? "\(noise)dBm" : String(noise)
 
                 let rssi = interface.rssiValue()
-                tempOutput["rssi_dbm"] = "\(rssi) dBm"
+                tempOutput["rssi_dbm"] = showUnits ? "\(rssi)dBm" : String(rssi)
 
                 let mode = interface.interfaceMode()
                 switch mode {
@@ -129,7 +133,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
 
                 if let channel = interface.wlanChannel() {
                     tempOutput["channel_number"] = String(channel.channelNumber)
-                    tempOutput["channel_band"] = channel.channelBand == .band2GHz ? "2.4GHz" : "5GHz"
+                    switch channel.channelBand {
+                    case .band2GHz:
+                        tempOutput["channel_band"] = "2.4GHz"
+                    case .band5GHz:
+                        tempOutput["channel_band"] = "5GHz"
+                    case .band6GHz:
+                        tempOutput["channel_band"] = "6GHz"
+                    case .bandUnknown:
+                        tempOutput["channel_band"] = "unknown"
+                    @unknown default:
+                        tempOutput["channel_band"] = "unknown"
+                    }
                     switch channel.channelWidth {
                     case .width20MHz: tempOutput["channel_width"] = "20MHz"
                     case .width40MHz: tempOutput["channel_width"] = "40MHz"
@@ -167,10 +182,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                 tempOutput["security"] = securityTypes.joined(separator: ", ")
 
                 let power = interface.transmitPower()
-                tempOutput["transmit_power"] = "\(power) dBm"
+                tempOutput["transmit_power"] = showUnits ? "\(power)dBm" : String(power)
 
                 let rate = interface.transmitRate()
-                tempOutput["transmit_rate"] = "\(rate) Mbps"
+                tempOutput["transmit_rate"] = showUnits ? "\(rate)Mbps" : String(rate)
 
                 // NOTE: https://stackoverflow.com/questions/48129952/core-wlan-mcs-index
                 if let mcs = interface.value(forKey: "mcsIndex") as? Int {
