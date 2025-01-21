@@ -50,9 +50,38 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
         }
     }
 
+    func showHelp() {
+        let help = """
+        使用方法: wifi-unredactor [オプション]
+
+        オプション:
+          --help              このヘルプメッセージを表示
+          --csv              CSV形式で出力（デフォルト: JSON形式）
+          --no-header        CSVヘッダーを非表示（CSV形式時のみ有効）
+          --no-units        単位を非表示（例: dBm, Mbps）
+          --fields <fields>  出力するフィールドをカンマ区切りで指定
+          --bssid-mapping <file>  BSSIDとAP名のマッピングファイルを指定
+
+        利用可能なフィールド:
+          \(jsonKeys.joined(separator: "\n          "))
+
+        例:
+          wifi-unredactor --csv --fields ssid,bssid,rssi_dbm
+          wifi-unredactor --bssid-mapping mapping.csv --no-units
+        """
+        print(help)
+        NSApp.terminate(nil)
+    }
+
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // コマンドライン引数を処理
         let args = CommandLine.arguments
+
+        if args.contains("--help") {
+            showHelp()
+            return
+        }
+
         if args.contains("--csv") {
             outputFormat = "csv"
         }
