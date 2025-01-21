@@ -184,7 +184,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                 let power = interface.transmitPower()
                 tempOutput["transmit_power"] = showUnits ? "\(power)dBm" : String(power)
 
-                let rate = interface.transmitRate()
+                let rate = Int(interface.transmitRate())
                 tempOutput["transmit_rate"] = showUnits ? "\(rate)Mbps" : String(rate)
 
                 // NOTE: https://stackoverflow.com/questions/48129952/core-wlan-mcs-index
