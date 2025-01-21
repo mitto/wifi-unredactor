@@ -6,6 +6,7 @@ import Foundation
 class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
     var locationManager: CLLocationManager?
     var outputFormat: String = "json"  // デフォルトはJSON形式
+    var showCSVHeader: Bool = true     // デフォルトはヘッダーを表示
 
     // 固定されたJSONキーの順序を定義
     let jsonKeys = [
@@ -34,6 +35,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
         if args.contains("--csv") {
             outputFormat = "csv"
         }
+        if args.contains("--no-header") {
+            showCSVHeader = false
+        }
 
         locationManager = CLLocationManager()
         locationManager?.delegate = self
@@ -48,7 +52,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
             return value.contains(",") ? "\"\(value)\"" : value
         }.joined(separator: ",")
 
-        print(header)
+        if showCSVHeader {
+            print(header)
+        }
         print(values)
     }
 
