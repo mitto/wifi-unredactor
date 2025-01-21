@@ -7,6 +7,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
     var locationManager: CLLocationManager?
     var outputFormat: String = "json"  // デフォルトはJSON形式
     var showCSVHeader: Bool = true     // デフォルトはヘッダーを表示
+    var selectedFields: [String]?      // 選択されたフィールド
 
     // 固定されたJSONキーの順序を定義
     let jsonKeys = [
@@ -38,6 +39,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
         if args.contains("--no-header") {
             showCSVHeader = false
         }
+        if let fieldsIndex = args.firstIndex(of: "--fields"),
+           fieldsIndex + 1 < args.count {
+            selectedFields = args[fieldsIndex + 1].split(separator: ",").map(String.init)
+            // 指定されたフィールドが有効かチェック
+            selectedFields = selectedFields?.filter { jsonKeys.contains($0) }
+            if selectedFields?.isEmpty ?? true {
+                selectedFields = nil  // 有効なフィールドがない場合はnilに
+            }
+        }
 
         locationManager = CLLocationManager()
         locationManager?.delegate = self
@@ -45,8 +55,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
     }
 
     func outputCSV(_ data: [String: String]) {
-        let header = jsonKeys.joined(separator: ",")
-        let values = jsonKeys.map { key in
+        let keysToUse = selectedFields ?? jsonKeys
+        let header = keysToUse.joined(separator: ",")
+        let values = keysToUse.map { key in
             let value = data[key] ?? ""
             // カンマを含む場合はダブルクォートで囲む
             return value.contains(",") ? "\"\(value)\"" : value
@@ -173,7 +184,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                 } else {
                     // 順序付きの出力を作成
                     var orderedOutput: [String: String] = [:]
-                    for key in jsonKeys {
+                    let keysToUse = selectedFields ?? jsonKeys
+                    for key in keysToUse {
                         if let value = tempOutput[key] {
                             orderedOutput[key] = value
                         }
