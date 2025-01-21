@@ -19,6 +19,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
 
                 jsonOutput["interface"] = interface.interfaceName
 
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ"
+                dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+                dateFormatter.calendar = Calendar(identifier: .gregorian)
+                jsonOutput["timestamp"] = dateFormatter.string(from: Date())
+
                 if let ssid = interface.ssid() {
                     jsonOutput["ssid"] = ssid
                 } else {
