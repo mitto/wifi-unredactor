@@ -9,11 +9,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
     var showCSVHeader: Bool = true     // デフォルトはヘッダーを表示
     var selectedFields: [String]?      // 選択されたフィールド
     var showUnits: Bool = true        // デフォルトは単位を表示
+    var bssidToApName: [String: String] = [:] // BSSIDとAP名のマッピング
 
     // 固定されたJSONキーの順序を定義
     let jsonKeys = [
         "timestamp",
         "bssid",
+        "ap_name",
         "channel_band",
         "channel_info",
         "channel_number",
@@ -31,6 +33,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
         "transmit_rate",
     ]
 
+    func loadBssidMapping(from path: String) {
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
+            print("error: failed to read BSSID mapping file")
+            return
+        }
+
+        let lines = content.components(separatedBy: .newlines)
+        for line in lines {
+            let components = line.components(separatedBy: ",")
+            if components.count >= 2 {
+                let bssid = components[0].trimmingCharacters(in: .whitespaces)
+                let apName = components[1].trimmingCharacters(in: .whitespaces)
+                bssidToApName[bssid] = apName
+            }
+        }
+    }
+
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // コマンドライン引数を処理
         let args = CommandLine.arguments
@@ -42,6 +61,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
         }
         if args.contains("--no-units") {
             showUnits = false
+        }
+        if let mappingIndex = args.firstIndex(of: "--bssid-mapping"),
+           mappingIndex + 1 < args.count {
+            loadBssidMapping(from: args[mappingIndex + 1])
         }
         if let fieldsIndex = args.firstIndex(of: "--fields"),
            fieldsIndex + 1 < args.count {
@@ -100,8 +123,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
 
                 if let bssid = interface.bssid() {
                     tempOutput["bssid"] = bssid
+                    if let apName = bssidToApName[bssid] {
+                        tempOutput["ap_name"] = apName
+                    } else {
+                        tempOutput["ap_name"] = ""
+                    }
                 } else {
                     tempOutput["bssid"] = "failed to retrieve BSSID"
+                    tempOutput["ap_name"] = ""
                 }
 
                 let phyMode = interface.activePHYMode()
