@@ -9,6 +9,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
     // 固定されたJSONキーの順序を定義
     let jsonKeys = [
         "interface",
+        "mac_address",
         "timestamp",
         "ssid",
         "bssid",
@@ -38,6 +39,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
                 var tempOutput: [String: String] = [:]
 
                 tempOutput["interface"] = interface.interfaceName
+
+                if let mac = interface.hardwareAddress() {
+                    tempOutput["mac_address"] = mac
+                } else {
+                    tempOutput["mac_address"] = "failed to retrieve MAC address"
+                }
 
                 let dateFormatter = DateFormatter()
                 dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ"
